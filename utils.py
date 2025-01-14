@@ -1,8 +1,10 @@
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
 from Crypto.Cipher import PKCS1_OAEP
+from Crypto.Signature import pkcs1_15
 from Crypto.PublicKey import RSA
 from Crypto.Random import get_random_bytes
+from Crypto.Hash import SHA256
 from websockets.asyncio.connection import Connection
 import base64
 
@@ -12,36 +14,44 @@ RSA_KEYS_SIZE = 2048
 FORMAT = "utf-8"
 
 
+def hash_data(data):
+    return SHA256.new(data)
+
+
 def encode(data):
     return base64.b64encode(data).decode(FORMAT)
 
 
-def decode(data):
-    return base64.b64decode(data)
+def decode(encoded_data):
+    return base64.b64decode(encoded_data)
 
 
-async def send(data, websocket: Connection, secret_key):
-    encrypted_data = encrypt_data(data.encode(), secret_key)
+async def send(
+    data: bytes, websocket: Connection, secret_key: bytes, private_key: bytes
+):
+    encrypted_data = encrypt_data(data, secret_key)
+    signature = sign_data(encrypted_data, private_key)
+
+    await websocket.send(encode(signature))
     await websocket.send(encode(encrypted_data))
 
 
-async def receive(websocket: Connection, secret_key):
-    encrypted_data = await websocket.recv()
-    data = decrypt_data(decode(encrypted_data), secret_key)
+async def receive(websocket: Connection, client: tuple[bytes, bytes]):
+    client_public_key, client_secret_key = client
 
-    return data.decode()
+    signature = decode(await websocket.recv())
+    encrypted_data = decode(await websocket.recv())
+
+    if verify_signature(encrypted_data, signature, client_public_key):
+        return decrypt_data(encrypted_data, client_secret_key)
 
 
-def generate_rsa_keys(server_name):
+def generate_asymmetric_keys():
     key = RSA.generate(RSA_KEYS_SIZE)
     private_key = key.export_key()
     public_key = key.public_key().export_key()
 
-    with open(f"{server_name}_private.pem", "wb") as private_file:
-        private_file.write(private_key)
-
-    with open(f"{server_name}_public.pem", "wb") as public_key_file:
-        public_key_file.write(public_key)
+    return public_key, private_key
 
 
 def generate_aes_key():
@@ -65,21 +75,31 @@ def decrypt_data(encrypted_message: str, key):
     return unpad(padded_message, AES.block_size)
 
 
-def encrypt_with_rsa(message: str, key):
+def encrypt_with_rsa(message, key):
+    key = RSA.import_key(key)
     cipher = PKCS1_OAEP.new(key)
     return cipher.encrypt(message)
 
 
 def decrypt_with_rsa(encrypted_message: str, key):
+    key = RSA.import_key(key)
     cipher = PKCS1_OAEP.new(key)
     return cipher.decrypt(encrypted_message)
 
 
-def load_rsa_keys(server_name):
-    with open(f"{server_name}_private.pem", "rb") as f:
-        private_key = RSA.import_key(f.read())
+def sign_data(data: bytes, private_key: bytes):
+    key = RSA.import_key(private_key)
+    hashed_data = hash_data(data)
+    signature = pkcs1_15.new(key).sign(hashed_data)
 
-    with open(f"{server_name}_public.pem", "rb") as f:
-        public_key = RSA.import_key(f.read())
+    return signature
 
-    return private_key, public_key
+
+def verify_signature(data: bytes, signature: bytes, public_key: bytes):
+    try:
+        key = RSA.import_key(public_key)
+        hashed_data = hash_data(data)
+        pkcs1_15.new(key).verify(hashed_data, signature)
+        return True
+    except (ValueError, TypeError):
+        return False

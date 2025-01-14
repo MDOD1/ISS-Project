@@ -1,44 +1,49 @@
 import asyncio
 import websockets
 from websockets.asyncio.server import ServerConnection
+from Crypto.PublicKey import RSA
+from Crypto.Cipher import PKCS1_OAEP
 from utils import (
-    load_rsa_keys,
+    generate_asymmetric_keys,
+    encrypt_with_rsa,
+    hash_data,
+    decode,
+    encode,
     encrypt_data,
     decrypt_data,
 )
 
-PORT = 8765
+PORT = 9000
 IP = "localhost"
 FORMAT = "utf-8"
 
-private_key, public_key = load_rsa_keys()
-clients = dict()
+public_key, private_key = generate_asymmetric_keys()
+servers = dict()
 
 
-async def secure_connection(websocket: ServerConnection):
-    await websocket.send(public_key.export_key())
+async def create_certificate(websocket: ServerConnection):
+    server_public_key = await websocket.recv()
+    key = RSA.import_key(key)
+    cipher = PKCS1_OAEP.new(key)
+    print(server_public_key)
+    hashed_server_public_key = hash_data(decode(server_public_key))
+    cipher.encrypt(hashed_server_public_key)
 
+    # server_public_key_encrypted = encrypt_with_rsa(
+    #     hashed_server_public_key, private_key
+    # )
 
-async def send(data, websocket: ServerConnection):
-    encrypted_data = encrypt_data(data.encode(), clients[websocket.id])
-    await websocket.send(encrypted_data)
-
-
-async def receive(websocket: ServerConnection):
-    encrypted_data = await websocket.recv()
-    return decrypt_data(encrypted_data, clients[websocket.id]).decode()
+    # await websocket.send(encode(server_public_key_encrypted))
 
 
 async def serve(websocket: ServerConnection):
-    await secure_connection(websocket)
-
-    data = await receive(websocket)
-    print(data)
-    await send("Welcome to my server", websocket)
+    path = websocket.request.path
+    if path[1:] == "create_certificate":
+        await create_certificate(websocket)
 
 
 async def start_server():
-    async with websockets.serve(serve, "localhost", 8765):
+    async with websockets.serve(serve, IP, PORT):
         await asyncio.Future()
 
 

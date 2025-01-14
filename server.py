@@ -1,35 +1,52 @@
 import asyncio
 import websockets
 from websockets.asyncio.server import ServerConnection
-from Crypto.PublicKey import RSA
 from utils import (
-    generate_rsa_keys,
+    generate_asymmetric_keys,
     decrypt_with_rsa,
-    load_rsa_keys,
+    verify_signature,
     encode,
     decode,
     send,
     receive,
+    sign_data,
+    verify_signature,
 )
 
 PORT = 8765
 IP = "localhost"
 FORMAT = "utf-8"
+CA_URI = "ws://localhost:9000/create_certificate"
 
-generate_rsa_keys("server")
-private_key, public_key = load_rsa_keys("server")
+public_key, private_key = generate_asymmetric_keys()
 clients = dict()
 
 
-async def secure_connection(websocket: ServerConnection):
-    await websocket.send(encode(public_key.export_key()))
-    client_secret_key_encrypted = await websocket.recv()
+async def create_certificate():
+    async with websockets.connect(CA_URI) as client:
+        await client.send(encode(public_key))
+        respone = await client.recv()
+        print(decode(respone))
 
-    client_secret_key = decrypt_with_rsa(
-        decode(client_secret_key_encrypted), private_key
+
+async def secure_connection(websocket: ServerConnection):
+    global clients
+
+    client_public_key = decode(await websocket.recv())
+    await websocket.send(encode(public_key))
+
+    signature = decode(await websocket.recv())
+    client_secret_key_encrypted = decode(await websocket.recv())
+
+    is_authenticated = verify_signature(
+        client_secret_key_encrypted,
+        signature,
+        client_public_key,
     )
 
-    clients[websocket.id] = client_secret_key
+    if is_authenticated:
+        client_secret_key = decrypt_with_rsa(client_secret_key_encrypted, private_key)
+        clients[websocket.id] = (client_public_key, client_secret_key)
 
 
 async def serve(websocket: ServerConnection):
@@ -37,10 +54,16 @@ async def serve(websocket: ServerConnection):
 
     data = await receive(websocket, clients[websocket.id])
     print(data)
-    await send("Welcome to my server", websocket, clients[websocket.id])
+    await send(
+        "Welcome to my server".encode(),
+        websocket,
+        clients[websocket.id][1],
+        private_key,
+    )
 
 
 async def start_server():
+    # await create_certificate()
     async with websockets.serve(serve, "localhost", 8765):
         await asyncio.Future()
 
