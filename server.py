@@ -3,6 +3,8 @@ import websockets
 from websockets.asyncio.server import ServerConnection
 from utils import (
     generate_asymmetric_keys,
+    convert_data_to_json,
+    convert_json_to_data,
     decrypt_with_rsa,
     encode,
     decode,
@@ -11,6 +13,7 @@ from utils import (
     sign_data,
     verify_signature,
 )
+from apis import sign_up, log_in, upload_document
 
 PORT = 8765
 IP = "localhost"
@@ -52,17 +55,23 @@ async def secure_connection(websocket: ServerConnection):
 
 async def serve(websocket: ServerConnection):
     await secure_connection(websocket)
-    _, client_secret_key = clients[websocket.id]
+    client = clients[websocket.id]
+    path = websocket.request.path[1:]
 
-    data = await receive(websocket, clients[websocket.id])
-    print(data)
+    if path == "sign_up":
+        await sign_up(websocket, client, private_key)
 
-    await send(
-        "Welcome to my server".encode(),
-        websocket,
-        client_secret_key,
-        private_key,
-    )
+    if path == "get_documents":
+        pass
+
+    if path == "log_in":
+        await log_in(websocket, client)
+
+    if path == "upload_document":
+        await upload_document(websocket, client, private_key)
+
+    if path == "download_document":
+        pass
 
 
 async def start_server():

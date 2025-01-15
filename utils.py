@@ -7,11 +7,20 @@ from Crypto.Random import get_random_bytes
 from Crypto.Hash import SHA256
 from websockets.asyncio.connection import Connection
 import base64
+import json
 
 
 AES_KEY_BYTE_SIZE = 16
 RSA_KEYS_SIZE = 2048
 FORMAT = "utf-8"
+
+
+def convert_data_to_json(data):
+    return json.dumps(data).encode()
+
+
+def convert_json_to_data(json_data):
+    return json.loads(json_data)
 
 
 def hash_data(data):
@@ -36,14 +45,12 @@ async def send(
     await websocket.send(encode(encrypted_data))
 
 
-async def receive(websocket: Connection, client: tuple[bytes, bytes]):
-    client_public_key, client_secret_key = client
-
+async def receive(websocket: Connection, secret_key, public_key):
     signature = decode(await websocket.recv())
     encrypted_data = decode(await websocket.recv())
 
-    if verify_signature(encrypted_data, signature, client_public_key):
-        return decrypt_data(encrypted_data, client_secret_key)
+    if verify_signature(encrypted_data, signature, public_key):
+        return decrypt_data(encrypted_data, secret_key)
 
 
 def generate_asymmetric_keys():
