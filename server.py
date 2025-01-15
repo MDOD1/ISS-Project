@@ -3,6 +3,7 @@ import websockets
 from websockets.asyncio.server import ServerConnection
 from utils import (
     generate_asymmetric_keys,
+    generate_aes_key,
     convert_data_to_json,
     convert_json_to_data,
     decrypt_with_rsa,
@@ -13,13 +14,14 @@ from utils import (
     sign_data,
     verify_signature,
 )
-from apis import sign_up, log_in, upload_document
+from apis import download_file, sign_up, log_in, upload_file, search
 
 PORT = 8765
 IP = "localhost"
 CA_URI = "ws://localhost:9000/create_certificate"
 
 public_key, private_key = generate_asymmetric_keys()
+secret_key = generate_aes_key()
 clients = dict()
 certificate = None
 
@@ -61,17 +63,17 @@ async def serve(websocket: ServerConnection):
     if path == "sign_up":
         await sign_up(websocket, client, private_key)
 
-    if path == "get_documents":
-        pass
+    if path == "search_user_files":
+        await search(websocket, client, private_key, secret_key)
 
     if path == "log_in":
-        await log_in(websocket, client)
+        await log_in(websocket, client, private_key, secret_key)
 
-    if path == "upload_document":
-        await upload_document(websocket, client, private_key)
+    if path == "upload_file":
+        await upload_file(websocket, client, private_key, secret_key)
 
-    if path == "download_document":
-        pass
+    if path == "download_file":
+        await download_file(websocket, client, private_key, secret_key)
 
 
 async def start_server():

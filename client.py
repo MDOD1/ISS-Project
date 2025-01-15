@@ -25,6 +25,7 @@ public_key, private_key = generate_asymmetric_keys()
 my_secret_key = generate_aes_key()
 server_public_key = None
 ca_public_key = None
+token = None
 
 
 async def secure_connection(client: ClientConnection):
@@ -53,32 +54,99 @@ async def connect(url, json):
         ca_public_key = decode(await client.recv())
         await client.close()
 
-    async with websockets.connect(url) as client:
+    async with websockets.connect(url, max_size=10 * 1024 * 1024) as client:
         await secure_connection(client)
         await send(json, client, my_secret_key, private_key)
         return await receive(client, my_secret_key, server_public_key)
 
 
 def sign_up():
-    request = {"action": "get_user", "user_id": 1}
+    request = {
+        "user_name": "me1",
+        "phone_number": "1324232",
+        "password": "hello",
+        "nationality_number": "4",
+        "is_staff": False,
+        "birth_date": "2018-10-1",
+    }
     json = convert_data_to_json(request)
     response = asyncio.run(connect(f"{URI}/sign_up", json))
     result = convert_json_to_data(response)
     print(result)
 
 
-def upload_document(document_path: str):
-    file_name = document_path.split("/")[-1]
-    with open(document_path, "rb") as file:
+def upload_file():
+    global token
+
+    file_path = "./documents/Information Security System.pdf"
+
+    file_name = file_path.split("/")[-1]
+    with open(file_path, "rb") as file:
         document = file.read()
-
     document = encode(document)
-    request = {"file_name": file_name, "file": document}
-    json = convert_data_to_json(request)
 
-    result = asyncio.run(connect(f"{URI}/upload_document", json))
+    request = {"token": token, "file_name": file_name, "content": document}
+    json = convert_data_to_json(request)
+    response = asyncio.run(connect(f"{URI}/upload_file", json))
+    result = convert_json_to_data(response)
+
     print(result)
+    return result
+
+
+def search():
+    global token
+
+    request = {"nationality_number": 1, "token": token}
+    json = convert_data_to_json(request)
+    response = asyncio.run(connect(f"{URI}/search_user_files", json))
+    result = convert_json_to_data(response)
+
+    print(result)
+    return result
+
+
+def download_file():
+    global token
+
+    request = {"file_id": 4, "token": token}
+    json = convert_data_to_json(request)
+    response = asyncio.run(connect(f"{URI}/download_file", json))
+    result = convert_json_to_data(response)
+
+    if result["status"] == 200:
+        file = result["file"]
+
+        file["content"] = decode(file["content"])
+        result["file"] = file
+
+        with open(f"./downloads/{file["file_name"]}", "wb") as f:
+            f.write(file["content"])
+    else:
+        print(result)
+
+    return result
+
+
+def log_in():
+    global token
+
+    request = {
+        "nationality_number": "2",
+        "password": "hello",
+    }
+    json = convert_data_to_json(request)
+    response = asyncio.run(connect(f"{URI}/log_in", json))
+    result = convert_json_to_data(response)
+    token = result["token"]
+
+    # print(token)
+    return result
 
 
 if __name__ == "__main__":
-    upload_document("./documents/Information Security System.pdf")
+    log_in()
+    # upload_file()
+    # sign_up()
+    # search()
+    download_file()

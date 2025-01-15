@@ -6,13 +6,27 @@ from Crypto.PublicKey import RSA
 from Crypto.Random import get_random_bytes
 from Crypto.Hash import SHA256
 from websockets.asyncio.connection import Connection
+import bcrypt
 import base64
+import jwt
 import json
 
 
-AES_KEY_BYTE_SIZE = 16
+AES_KEY_BYTE_SIZE = 32
 RSA_KEYS_SIZE = 2048
 FORMAT = "utf-8"
+
+
+def generate_token(payload, secret_key):
+    return jwt.encode(payload, secret_key, algorithm="HS256")
+
+
+def verify_token(token, secret_key):
+    try:
+        payload = jwt.decode(token, secret_key, algorithms=["HS256"])
+        return payload
+    except jwt.InvalidTokenError:
+        return None
 
 
 def convert_data_to_json(data):
@@ -74,8 +88,8 @@ def encrypt_data(message: bytes, key):
 
 
 def decrypt_data(encrypted_message: str, key):
-    iv = encrypted_message[:AES_KEY_BYTE_SIZE]
-    ciphertext = encrypted_message[AES_KEY_BYTE_SIZE:]
+    iv = encrypted_message[:16]
+    ciphertext = encrypted_message[16:]
 
     cipher = AES.new(key, AES.MODE_CBC, iv)
     padded_message = cipher.decrypt(ciphertext)
@@ -110,3 +124,11 @@ def verify_signature(data: bytes, signature: bytes, public_key: bytes):
         return True
     except (ValueError, TypeError):
         return False
+
+
+def hash_password(password):
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt())
+
+
+def check_password(password, stored_hashed_password):
+    return bcrypt.checkpw(password.encode("utf-8"), stored_hashed_password)
