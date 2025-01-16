@@ -1,71 +1,22 @@
 import asyncio
-import websockets
-from websockets.asyncio.client import ClientConnection
 from utils import (
-    generate_aes_key,
-    generate_asymmetric_keys,
     convert_json_to_data,
     convert_data_to_json,
-    encrypt_with_rsa,
-    sign_data,
-    verify_signature,
-    encrypt_data,
-    decrypt_data,
     encode,
     decode,
-    send,
-    receive,
 )
+from https_request import connect
 
 URI = "ws://localhost:8765"
-CA_URI = "ws://localhost:9000"
-
-
-public_key, private_key = generate_asymmetric_keys()
-my_secret_key = generate_aes_key()
-server_public_key = None
-ca_public_key = None
 token = None
-
-
-async def secure_connection(client: ClientConnection):
-    global server_public_key, ca_public_key
-
-    await client.send(encode(public_key))
-    server_public_key = decode(await client.recv())
-    certificate = decode(await client.recv())
-    isVerified = verify_signature(server_public_key, certificate, ca_public_key)
-
-    if not isVerified:
-        print("This connection is not secure!")
-        client.close()
-        return
-
-    encrypted_secret_key = encrypt_with_rsa(my_secret_key, server_public_key)
-    signature = sign_data(encrypted_secret_key, private_key)
-
-    await client.send(encode(signature))
-    await client.send(encode(encrypted_secret_key))
-
-
-async def connect(url, json):
-    global ca_public_key, server_public_key, private_key
-    async with websockets.connect(CA_URI) as client:
-        ca_public_key = decode(await client.recv())
-        await client.close()
-
-    async with websockets.connect(url, max_size=10 * 1024 * 1024) as client:
-        await secure_connection(client)
-        await send(json, client, my_secret_key, private_key)
-        return await receive(client, my_secret_key, server_public_key)
 
 
 def sign_up():
     request = {
-        "user_name": "me1",
+        "user_name": "user2",
         "phone_number": "1324232",
         "password": "hello",
-        "nationality_number": "4",
+        "nationality_number": "40",
         "is_staff": False,
         "birth_date": "2018-10-1",
     }
@@ -79,8 +30,8 @@ def upload_file():
     global token
 
     file_path = "./documents/Information Security System.pdf"
-
     file_name = file_path.split("/")[-1]
+
     with open(file_path, "rb") as file:
         document = file.read()
     document = encode(document)
@@ -97,7 +48,7 @@ def upload_file():
 def search():
     global token
 
-    request = {"nationality_number": 1, "token": token}
+    request = {"nationality_number": "40", "token": token}
     json = convert_data_to_json(request)
     response = asyncio.run(connect(f"{URI}/search_user_files", json))
     result = convert_json_to_data(response)
@@ -132,15 +83,17 @@ def log_in():
     global token
 
     request = {
-        "nationality_number": "2",
+        "nationality_number": "20",
         "password": "hello",
     }
     json = convert_data_to_json(request)
     response = asyncio.run(connect(f"{URI}/log_in", json))
     result = convert_json_to_data(response)
-    token = result["token"]
 
-    # print(token)
+    if result["status"] == 200:
+        token = result["token"]
+
+    # print(result)
     return result
 
 
@@ -148,5 +101,5 @@ if __name__ == "__main__":
     log_in()
     # upload_file()
     # sign_up()
-    # search()
-    download_file()
+    search()
+    # download_file()
