@@ -1,172 +1,225 @@
-from websockets.asyncio.server import ServerConnection
 from sql_code.operations import insert_user, get_user, insert_file, get_files, get_file
 from utils import (
     convert_data_to_json,
-    convert_json_to_data,
     verify_token,
     check_password,
     decode,
     encode,
     generate_token,
-    send,
-    receive,
 )
 
 
-async def search(websocket: ServerConnection, client, private_key, secret_key):
-    client_public_key, client_secret_key = client
-
-    request = await receive(websocket, client_secret_key, client_public_key)
-    data = convert_json_to_data(request)
-    token = data.get("token", None)
+def search(request, secret_key):
+    header = request["header"]
+    body = request["body"]
+    token = header.get("token")
 
     if not token:
-        response = convert_data_to_json({"status": 401, "message": "Unauthenticated"})
-        await send(response, websocket, client_secret_key, private_key)
-        await websocket.close()
-        return
+        return convert_data_to_json(
+            {
+                "header": {"status": 401},
+                "body": {"message": "Unauthenticated"},
+            }
+        )
 
     result = verify_token(token, secret_key)
+
+    if not result:
+        return convert_data_to_json(
+            {
+                "header": {"status": 401},
+                "body": {"message": "Unauthenticated"},
+            }
+        )
+
     user_id = result["user_id"]
     is_staff = result["is_staff"]
 
-    if not result or not is_staff:
-        response = convert_data_to_json({"status": 403, "message": "Unauthorized"})
-        await send(response, websocket, client_secret_key, private_key)
-        await websocket.close()
-        return
+    if not is_staff:
+        return convert_data_to_json(
+            {
+                "header": {"status": 403},
+                "body": {"message": "Forbidden"},
+            }
+        )
 
-    user = get_user("nationality_number", data["nationality_number"])
+    user = get_user("nationality_number", body["nationality_number"])
 
     if not user:
-        response = convert_data_to_json({"status": 404, "message": "User not Found"})
-        await send(response, websocket, client_secret_key, private_key)
-        await websocket.close()
-        return
+        return convert_data_to_json(
+            {
+                "header": {"status": 404},
+                "body": {"message": "User not Found!"},
+            }
+        )
 
     user_id, _, _ = user
 
     files = get_files("user_id", user_id)
-    response = convert_data_to_json({"status": 200, "data": files})
-    await send(response, websocket, client_secret_key, private_key)
+
+    return convert_data_to_json(
+        {
+            "header": {"status": 200},
+            "body": {"data": files},
+        }
+    )
 
 
-async def upload_file(websocket: ServerConnection, client, private_key, secret_key):
-    client_public_key, client_secret_key = client
-
-    request = await receive(websocket, client_secret_key, client_public_key)
-    data = convert_json_to_data(request)
-    token = data.get("token", None)
+def upload_file(request, secret_key):
+    header = request["header"]
+    body = request["body"]
+    token = header.get("token")
 
     if not token:
-        response = convert_data_to_json({"status": 401, "message": "Unauthenticated"})
-        await send(response, websocket, client_secret_key, private_key)
-        await websocket.close()
-        return
+        return convert_data_to_json(
+            {
+                "header": {"status": 401},
+                "body": {"message": "Unauthenticated"},
+            }
+        )
 
     result = verify_token(token, secret_key)
+
+    if not result:
+        return convert_data_to_json(
+            {
+                "header": {"status": 401},
+                "body": {"message": "Unauthenticated"},
+            }
+        )
+
     user_id = result["user_id"]
     is_staff = result["is_staff"]
 
-    if not result or is_staff:
-        response = convert_data_to_json({"status": 403, "message": "Unauthorized"})
-        await send(response, websocket, client_secret_key, private_key)
-        await websocket.close()
-        return
+    if is_staff:
+        return convert_data_to_json(
+            {
+                "header": {"status": 403},
+                "body": {"message": "Forbidden"},
+            }
+        )
 
-    data["content"] = decode(data["content"])
-    data["user_id"] = user_id
+    body["content"] = decode(body["content"])
+    body["user_id"] = user_id
 
-    insert_file(data)
+    insert_file(body)
 
-    response = convert_data_to_json({"status": 200, "message": "Uploaded successfully"})
-    await send(response, websocket, client_secret_key, private_key)
+    return convert_data_to_json(
+        {
+            "header": {"status": 200},
+            "body": {"message": "Uploaded successfully"},
+        }
+    )
 
 
-async def sign_up(websocket: ServerConnection, client, private_key):
-    client_public_key, client_secret_key = client
-
-    request = await receive(websocket, client_secret_key, client_public_key)
-    data = convert_json_to_data(request)
+def sign_up(request, secret_key):
+    body = request["body"]
 
     try:
-        insert_user(data)
-        response = convert_data_to_json(
-            {"status": 200, "message": "Signed up Successfully!"}
-        )
+        insert_user(body)
+
+        response = {
+            "header": {"status": 200},
+            "body": {"message": "Signed up successfully"},
+        }
+
     except Exception as e:
-        response = convert_data_to_json(
-            {"status": 400, "message": "This Nationality Number is already used!"}
-        )
+        response = {
+            "haeader": {
+                "status": 400,
+            },
+            "body": {
+                "message": "This Nationality Number is already used!",
+            },
+        }
 
-    await send(response, websocket, client_secret_key, private_key)
+    return convert_data_to_json(response)
 
 
-async def log_in(websocket: ServerConnection, client, private_key, secret_key):
-    client_public_key, client_secret_key = client
+def log_in(request, secret_key):
+    body = request["body"]
 
-    request = await receive(websocket, client_secret_key, client_public_key)
-    data = convert_json_to_data(request)
-
-    user = get_user("nationality_number", data["nationality_number"])
-
+    user = get_user("nationality_number", body["nationality_number"])
     if user:
         id, stored_password, is_staff = user
 
-    if user and check_password(data["password"], stored_password):
+    if user and check_password(body["password"], stored_password):
         token = generate_token({"user_id": id, "is_staff": is_staff}, secret_key)
 
         response = {
-            "status": 200,
-            "data": {
+            "header": {
+                "status": 200,
+            },
+            "body": {
+                "token": token,
                 "message": "Logged in Successfully!",
                 "is_staff": is_staff,
             },
-            "token": token,
         }
     else:
-        response = {"status": 404, "message": "This user was not found!"}
+        response = {
+            "header": {
+                "status": 404,
+            },
+            "body": {
+                "message": "This user was not found!",
+            },
+        }
 
-    await send(
-        convert_data_to_json(response), websocket, client_secret_key, private_key
-    )
+    return convert_data_to_json(response)
 
 
-async def download_file(websocket: ServerConnection, client, private_key, secret_key):
-    client_public_key, client_secret_key = client
-
-    request = await receive(websocket, client_secret_key, client_public_key)
-    data = convert_json_to_data(request)
-    token = data.get("token", None)
+def download_file(request, secret_key):
+    header = request["header"]
+    body = request["body"]
+    token = header.get("token")
 
     if not token:
-        response = convert_data_to_json({"status": 401, "message": "Unauthenticated"})
-        await send(response, websocket, client_secret_key, private_key)
-        await websocket.close()
-        return
+        return convert_data_to_json(
+            {
+                "header": {"status": 401},
+                "body": {"message": "Unauthenticated"},
+            }
+        )
 
     result = verify_token(token, secret_key)
+
+    if not result:
+        return convert_data_to_json(
+            {
+                "header": {"status": 401},
+                "body": {"message": "Unauthenticated"},
+            }
+        )
+
     is_staff = result["is_staff"]
 
-    if not result or not is_staff:
-        response = convert_data_to_json({"status": 403, "message": "Unauthorized"})
-        await send(response, websocket, client_secret_key, private_key)
-        await websocket.close()
-        return
+    if not is_staff:
+        return convert_data_to_json(
+            {
+                "header": {"status": 403},
+                "body": {"message": "Forbidden"},
+            }
+        )
 
-    file = get_file(data["file_id"])
+    file = get_file(body["file_id"])
 
     if not file:
-        response = convert_data_to_json(
-            {"status": 404, "message": "This File is not Found"}
+        return convert_data_to_json(
+            {
+                "header": {"status": 404},
+                "body": {"message": "This File is not Found!"},
+            }
         )
-        await send(response, websocket, client_secret_key, private_key)
-        await websocket.close()
-        return
 
     file["content"] = encode(file["content"])
 
-    response = convert_data_to_json(
-        {"status": 200, "message": "Downloaded Successfully", "file": file}
+    return convert_data_to_json(
+        {
+            "header": {"status": 200},
+            "body": {
+                "file_name": file["file_name"],
+                "content": file["content"],
+            },
+        }
     )
-    await send(response, websocket, client_secret_key, private_key)

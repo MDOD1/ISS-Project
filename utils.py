@@ -5,8 +5,8 @@ from Crypto.Signature import pkcs1_15
 from Crypto.PublicKey import RSA
 from Crypto.Random import get_random_bytes
 from Crypto.Hash import SHA256
-from websockets.asyncio.connection import Connection
 import bcrypt
+import socket
 import base64
 import jwt
 import json
@@ -15,6 +15,7 @@ import json
 AES_KEY_BYTE_SIZE = 32
 RSA_KEYS_SIZE = 2048
 FORMAT = "utf-8"
+BUFFER_SIZE = 1024
 
 
 def generate_token(payload, secret_key):
@@ -49,22 +50,47 @@ def decode(encoded_data):
     return base64.b64decode(encoded_data)
 
 
-async def send(
-    data: bytes, websocket: Connection, secret_key: bytes, private_key: bytes
-):
-    encrypted_data = encrypt_data(data, secret_key)
-    signature = sign_data(encrypted_data, private_key)
+def send(data, socket: socket.socket, secret_key: bytes, private_key: bytes):
+    encrypted_request = encrypt_data(data, secret_key)
+    signature = sign_data(encrypted_request, private_key)
 
-    await websocket.send(encode(signature))
-    await websocket.send(encode(encrypted_data))
+    data = convert_data_to_json(
+        {"signature": encode(signature), "data": encode(encrypted_request)}
+    )
+    data_size = len(data)
+    socket.send(convert_data_to_json({"data_size": data_size}))
+
+    message = socket.recv(BUFFER_SIZE).decode(FORMAT).strip()
+
+    for i in range(0, data_size, BUFFER_SIZE):
+        socket.send(data[i : i + BUFFER_SIZE])
 
 
-async def receive(websocket: Connection, secret_key, public_key):
-    signature = decode(await websocket.recv())
-    encrypted_data = decode(await websocket.recv())
+def receive(socket: socket.socket, secret_key, public_key):
+    request = socket.recv(BUFFER_SIZE).decode(FORMAT).strip()
+    request = convert_json_to_data(request)
 
-    if verify_signature(encrypted_data, signature, public_key):
-        return decrypt_data(encrypted_data, secret_key)
+    data_size = int(request["data_size"])
+    socket.send(convert_data_to_json({"message": "Okay"}))
+
+    data = b""
+    total_received = 0
+    while total_received < data_size:
+        chunk = socket.recv(BUFFER_SIZE)
+        data += chunk
+        total_received += len(chunk)
+
+    data = convert_json_to_data(data)
+
+    signature = decode(data["signature"])
+    encrypted_response = decode(data["data"])
+
+    is_verified = verify_signature(encrypted_response, signature, public_key)
+    if is_verified:
+        response = decrypt_data(encrypted_response, secret_key)
+        return convert_json_to_data(response)
+    else:
+        print("Data is corrupted")
 
 
 def generate_asymmetric_keys():
