@@ -29,7 +29,7 @@ def run_client():
     os.system("python client.py")
 
 
-for _ in range(10):
+for _ in range(4):
     threading.Thread(target=run_client).start()
 # ====================================================================================
 

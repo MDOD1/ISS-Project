@@ -1,6 +1,5 @@
 from sql_code.operations import insert_user, get_user, insert_file, get_files, get_file
 from utils import (
-    convert_data_to_json,
     verify_token,
     check_password,
     decode,
@@ -15,54 +14,44 @@ def search(request, secret_key):
     token = header.get("token")
 
     if not token:
-        return convert_data_to_json(
-            {
-                "header": {"status": 401},
-                "body": {"message": "Unauthenticated"},
-            }
-        )
+        return {
+            "header": {"status": 401},
+            "body": {"message": "Unauthenticated"},
+        }
 
     result = verify_token(token, secret_key)
 
     if not result:
-        return convert_data_to_json(
-            {
-                "header": {"status": 401},
-                "body": {"message": "Unauthenticated"},
-            }
-        )
+        return {
+            "header": {"status": 401},
+            "body": {"message": "Unauthenticated"},
+        }
 
     user_id = result["user_id"]
     is_staff = result["is_staff"]
 
     if not is_staff:
-        return convert_data_to_json(
-            {
-                "header": {"status": 403},
-                "body": {"message": "Forbidden"},
-            }
-        )
+        return {
+            "header": {"status": 403},
+            "body": {"message": "Forbidden"},
+        }
 
     user = get_user("nationality_number", body["nationality_number"])
 
     if not user:
-        return convert_data_to_json(
-            {
-                "header": {"status": 404},
-                "body": {"message": "User not Found!"},
-            }
-        )
+        return {
+            "header": {"status": 404},
+            "body": {"message": "User not Found!"},
+        }
 
     user_id, _, _ = user
 
     files = get_files("user_id", user_id)
 
-    return convert_data_to_json(
-        {
-            "header": {"status": 200},
-            "body": {"data": files},
-        }
-    )
+    return {
+        "header": {"status": 200},
+        "body": {"data": files},
+    }
 
 
 def upload_file(request, secret_key):
@@ -71,45 +60,37 @@ def upload_file(request, secret_key):
     token = header.get("token")
 
     if not token:
-        return convert_data_to_json(
-            {
-                "header": {"status": 401},
-                "body": {"message": "Unauthenticated"},
-            }
-        )
+        return {
+            "header": {"status": 401},
+            "body": {"message": "Unauthenticated"},
+        }
 
     result = verify_token(token, secret_key)
 
     if not result:
-        return convert_data_to_json(
-            {
-                "header": {"status": 401},
-                "body": {"message": "Unauthenticated"},
-            }
-        )
+        return {
+            "header": {"status": 401},
+            "body": {"message": "Unauthenticated"},
+        }
 
     user_id = result["user_id"]
     is_staff = result["is_staff"]
 
     if is_staff:
-        return convert_data_to_json(
-            {
-                "header": {"status": 403},
-                "body": {"message": "Forbidden"},
-            }
-        )
+        return {
+            "header": {"status": 403},
+            "body": {"message": "Forbidden"},
+        }
 
     body["content"] = decode(body["content"])
     body["user_id"] = user_id
 
     insert_file(body)
 
-    return convert_data_to_json(
-        {
-            "header": {"status": 200},
-            "body": {"message": "Uploaded successfully"},
-        }
-    )
+    return {
+        "header": {"status": 200},
+        "body": {"message": "Uploaded successfully"},
+    }
 
 
 def sign_up(request, secret_key):
@@ -133,7 +114,7 @@ def sign_up(request, secret_key):
             },
         }
 
-    return convert_data_to_json(response)
+    return response
 
 
 def log_in(request, secret_key):
@@ -166,7 +147,7 @@ def log_in(request, secret_key):
             },
         }
 
-    return convert_data_to_json(response)
+    return response
 
 
 def download_file(request, secret_key):
@@ -175,51 +156,41 @@ def download_file(request, secret_key):
     token = header.get("token")
 
     if not token:
-        return convert_data_to_json(
-            {
-                "header": {"status": 401},
-                "body": {"message": "Unauthenticated"},
-            }
-        )
+        return {
+            "header": {"status": 401},
+            "body": {"message": "Unauthenticated"},
+        }
 
     result = verify_token(token, secret_key)
 
     if not result:
-        return convert_data_to_json(
-            {
-                "header": {"status": 401},
-                "body": {"message": "Unauthenticated"},
-            }
-        )
+        return {
+            "header": {"status": 401},
+            "body": {"message": "Unauthenticated"},
+        }
 
     is_staff = result["is_staff"]
 
     if not is_staff:
-        return convert_data_to_json(
-            {
-                "header": {"status": 403},
-                "body": {"message": "Forbidden"},
-            }
-        )
+        return {
+            "header": {"status": 403},
+            "body": {"message": "Forbidden"},
+        }
 
     file = get_file(body["file_id"])
 
     if not file:
-        return convert_data_to_json(
-            {
-                "header": {"status": 404},
-                "body": {"message": "This File is not Found!"},
-            }
-        )
+        return {
+            "header": {"status": 404},
+            "body": {"message": "This File is not Found!"},
+        }
 
     file["content"] = encode(file["content"])
 
-    return convert_data_to_json(
-        {
-            "header": {"status": 200},
-            "body": {
-                "file_name": file["file_name"],
-                "content": file["content"],
-            },
-        }
-    )
+    return {
+        "header": {"status": 200},
+        "body": {
+            "file_name": file["file_name"],
+            "content": file["content"],
+        },
+    }

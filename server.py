@@ -11,6 +11,8 @@ from utils import (
     decrypt_with_rsa,
     encode,
     decode,
+    sanitize_input,
+    escape_output,
 )
 from apis import download_file, search, sign_up, log_in, upload_file
 
@@ -89,6 +91,7 @@ def secure_connection(client_socket: socket.socket):
 
 def handle_client(client: socket.socket):
     global clients, public_key, secret_key
+
     try:
         secure_connection(client)
         client_public_key, client_secret_key = clients[id(client)]
@@ -99,6 +102,8 @@ def handle_client(client: socket.socket):
                 {"body": {"message": "Something went Wrong"}}
             )
             send(response, client, client_secret_key, private_key)
+
+        request["body"] = sanitize_input(request["body"])
 
         header = request["header"]
         path = header["path"]
@@ -111,9 +116,10 @@ def handle_client(client: socket.socket):
             send(response, client, client_secret_key, private_key)
 
         response = route_handler(request, secret_key)
+        response["body"] = escape_output(response["body"])
 
         send(
-            response,
+            convert_data_to_json(response),
             client,
             client_secret_key,
             private_key,

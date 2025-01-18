@@ -10,12 +10,32 @@ import socket
 import base64
 import jwt
 import json
+import bleach
 
 
 AES_KEY_BYTE_SIZE = 32
-RSA_KEYS_SIZE = 2048
+RSA_KEYS_BYTE_SIZE = 2048
 FORMAT = "utf-8"
 BUFFER_SIZE = 1024
+
+
+import html
+
+
+def escape_output(data):
+    if isinstance(data, dict):
+        return {key: escape_output(value) for key, value in data.items()}
+    elif isinstance(data, str):
+        return html.escape(data)
+    return data
+
+
+def sanitize_input(data: dict):
+    for key, value in data.items():
+        if isinstance(value, str):
+            data[key] = bleach.clean(value, strip=True)
+
+    return data
 
 
 def generate_token(payload, secret_key):
@@ -94,7 +114,7 @@ def receive(socket: socket.socket, secret_key, public_key):
 
 
 def generate_asymmetric_keys():
-    key = RSA.generate(RSA_KEYS_SIZE)
+    key = RSA.generate(RSA_KEYS_BYTE_SIZE)
     private_key = key.export_key()
     public_key = key.public_key().export_key()
 
